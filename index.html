@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PhaseFlow — Industrial Load Balancing System</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ═══════════════════════════════ HEADER -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">
+      <svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <polygon points="18,2 34,10 34,26 18,34 2,26 2,10" stroke="#00e5ff" stroke-width="1.5" fill="rgba(0,229,255,0.05)"/>
+        <path d="M18 8 L18 18 L26 22" stroke="#00e5ff" stroke-width="1.5" stroke-linecap="round"/>
+        <circle cx="18" cy="18" r="3" fill="#00e5ff"/>
+        <path d="M10 14 L14 18 L10 22" stroke="#4a9eff" stroke-width="1" stroke-linecap="round"/>
+        <path d="M26 14 L22 18 L26 22" stroke="#ff4d6d" stroke-width="1" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <div>
+      <div class="logo-text">PHASEFLOW</div>
+      <div class="logo-sub">Industrial Load Balancing · 3-Phase AC</div>
+    </div>
+  </div>
+  <div class="header-status">
+    <div class="status-item">
+      <div class="status-dot green"></div>
+      <span>GRID STABLE</span>
+    </div>
+    <div class="status-item">
+      <div class="status-dot orange" id="alertDot"></div>
+      <span id="alertStatusText">2 WARNINGS</span>
+    </div>
+    <div class="live-badge">
+      <div class="live-dot"></div>
+      LIVE
+    </div>
+    <div class="header-time" id="clockDisplay">00:00:00</div>
+    <button class="theme-toggle" id="themeToggleBtn" onclick="toggleTheme()" title="Toggle Light/Dark Mode">
+      <span id="themeIcon">&#9728;</span>
+      <span id="themeLabel">LIGHT</span>
+    </button>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════ NAV -->
+<nav>
+  <button class="active" onclick="switchTab('overview', this)">Overview</button>
+  <button onclick="switchTab('analysis', this)">Load Analysis</button>
+  <button onclick="switchTab('power', this)">Power Quality</button>
+  <button onclick="switchTab('thermal', this)">Thermal Monitor</button>
+  <button onclick="switchTab('history', this)">History &amp; Reports</button>
+  <button onclick="switchTab('alerts', this)">Alerts &amp; Solutions</button>
+</nav>
+
+<main>
+
+<!-- ═══════════════════════════════ TAB: OVERVIEW -->
+<div class="tab-panel active" id="tab-overview">
+
+  <!-- KPI ROW -->
+  <div class="kpi-row">
+    <div class="kpi-card cyan">
+      <div class="kpi-label">System Voltage</div>
+      <div class="kpi-value cyan" id="kpi-voltage">415.2</div>
+      <div class="kpi-unit">Volts (L-L)</div>
+      <div class="kpi-delta up" id="kpi-voltage-delta">&#9650; +0.05% nominal</div>
+      <div class="sparkline" id="spark-voltage"></div>
+    </div>
+    <div class="kpi-card green">
+      <div class="kpi-label">Total Current</div>
+      <div class="kpi-value green" id="kpi-current">186.4</div>
+      <div class="kpi-unit">Amperes</div>
+      <div class="kpi-delta warn" id="kpi-current-delta">&#9650; 74% of rated</div>
+      <div class="sparkline" id="spark-current"></div>
+    </div>
+    <div class="kpi-card orange">
+      <div class="kpi-label">Active Power</div>
+      <div class="kpi-value orange" id="kpi-power">128.4</div>
+      <div class="kpi-unit">kW</div>
+      <div class="kpi-delta up">&#9650; +2.1% last hr</div>
+      <div class="sparkline" id="spark-power"></div>
+    </div>
+    <div class="kpi-card yellow">
+      <div class="kpi-label">Power Factor</div>
+      <div class="kpi-value yellow" id="kpi-pf">0.91</div>
+      <div class="kpi-unit">lagging</div>
+      <div class="kpi-delta warn">&#9660; below 0.95 target</div>
+      <div class="sparkline" id="spark-pf"></div>
+    </div>
+    <div class="kpi-card red">
+      <div class="kpi-label">Max Temperature</div>
+      <div class="kpi-value red" id="kpi-temp">78.4</div>
+      <div class="kpi-unit">&deg;C &mdash; Phase B Bus</div>
+      <div class="kpi-delta down">&#9650; CRITICAL ZONE</div>
+      <div class="sparkline" id="spark-temp"></div>
+    </div>
+    <div class="kpi-card blue">
+      <div class="kpi-label">Load Balance</div>
+      <div class="kpi-value blue" id="kpi-balance">94.2</div>
+      <div class="kpi-unit">% balanced</div>
+      <div class="kpi-delta up">&#9650; +1.2% optimized</div>
+      <div class="sparkline" id="spark-bal"></div>
+    </div>
+  </div>
+
+  <!-- 3-PHASE GAUGES + ALERTS -->
+  <div class="section-title">3-Phase Real-Time Monitor</div>
+  <div class="phase-gauge-row">
+
+    <!-- Phase A -->
+    <div class="phase-card">
+      <div class="phase-title phase-a-title">PHASE A &mdash; L1</div>
+      <div class="gauge-wrap">
+        <canvas id="gaugeA" class="gauge-canvas"></canvas>
+        <div class="gauge-center">
+          <div class="gauge-center-value" style="color:var(--phase-a)" id="gaugeA-val">238.4V</div>
+          <div class="gauge-center-label">VOLTAGE</div>
+        </div>
+      </div>
+      <div class="phase-stats">
+        <div class="phase-stat">
+          <div class="phase-stat-val" style="color:var(--phase-a)" id="phaseA-cur">61.2A</div>
+          <div class="phase-stat-lbl">Current</div>
+        </div>
+        <div class="phase-stat">
+          <div class="phase-stat-val" style="color:var(--phase-a)" id="phaseA-pwr">14.2kW</div>
+          <div class="phase-stat-lbl">Active Power</div>
+        </div>
+        <div class="phase-stat">
+          <div class="phase-stat-val" style="color:var(--phase-a)" id="phaseA-pf">0.93</div>
+          <div class="phase-stat-lbl">PF</div>
+        </div>
+        <div class="phase-stat">
+          <div class="phase-stat-val" style="color:var(--phase-a)" id="phaseA-thd">3.2%</div>
+          <div class="phase-stat-lbl">THD</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Phase B -->
+    <div class="phase-card">
+      <div class="phase-title phase-b-title">PHASE B &mdash; L2</div>
+      <div class="gauge-wrap">
+        <canvas id="gaugeB" class="gauge-canvas"></canvas>
+        <div class="gauge-center">
+          <div class="gauge-center-value" style="color:var(--phase-b)" id="gaugeB-val">241.8V</div>
+          <div class="gauge-center-label">VOLTAGE</div>
+        </div>
+      </div>
+      <div class="phase-stats">
+        <div class="phase-stat">
+          <div class="phase-stat-val" style="color:var(--phase-b)" id="phaseB-cur">78.6A</div>
+          <div class="phase-stat-lbl">Current</div>
+        </div>
+        <div class="phase-stat">
+          <div class="phase-stat-val" style="color:var(--phase-b)" id="phaseB-pwr">18.7kW</div>
+          <div class="phase-stat-lbl">Active Power</div>
+        </div>
+        <div class="phase-stat">
+          <div class="phase-stat-val" style="color:var(--phase-b)" id="phaseB-pf">0.88</div>
+          <div class="phase-stat-lbl">PF</div>
+        </div>
+        <div class="phase-stat">
+          <div class="phase-stat-val" style="color:var(--phase-b)" id="phaseB-thd">5.8%</div>
+          <div class="phase-stat-lbl">THD</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Phase C -->
+    <div class="phase-card">
+      <div class="phase-title phase-c-title">PHASE C &mdash; L3</div>
+      <div class="gauge-wrap">
+        <canvas id="gaugeC" class="gauge-canvas"></canvas>
+        <div class="gauge-center">
+          <div class="gauge-center-value" style="color:var(--phase-c)" id="gaugeC-val">236.1V</div>
+          <div class="gauge-center-label">VOLTAGE</div>
+        </div>
+      </div>
+      <div class="phase-stats">
+        <div class="phase-stat">
+          <div class="phase-stat-val" style="color:var(--phase-c)" id="phaseC-cur">46.6A</div>
+          <div class="phase-stat-lbl">Current</div>
+        </div>
+        <div class="phase-stat">
+          <div class="phase-stat-val" style="color:var(--phase-c)" id="phaseC-pwr">10.8kW</div>
+          <div class="phase-stat-lbl">Active Power</div>
+        </div>
+        <div class="phase-stat">
+          <div class="phase-stat-val" style="color:var(--phase-c)" id="phaseC-pf">0.92</div>
+          <div class="phase-stat-lbl">PF</div>
+        </div>
+        <div class="phase-stat">
+          <div class="phase-stat-val" style="color:var(--phase-c)" id="phaseC-thd">2.9%</div>
+          <div class="phase-stat-lbl">THD</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Alerts Panel -->
+    <div class="alerts-card">
+      <div class="alerts-header">
+        <div class="alerts-title">ACTIVE ALERTS</div>
+        <div class="alert-count" id="alertCountBadge">2</div>
+      </div>
+      <div class="alerts-list" id="alertsList">
+        <div class="alert-item critical" onclick="openSolution('overtemp')">
+          <div class="alert-top">
+            <div class="alert-title" style="color:var(--accent-red)">&#9888; Phase B Overtemperature</div>
+            <div class="alert-time">14:23:11</div>
+          </div>
+          <div class="alert-desc">Bus bar temperature 78.4&deg;C &mdash; exceeds 75&deg;C threshold. Risk of insulation damage.</div>
+        </div>
+        <div class="alert-item warning" onclick="openSolution('unbalance')">
+          <div class="alert-top">
+            <div class="alert-title" style="color:var(--accent-orange)">&#9889; Load Imbalance Detected</div>
+            <div class="alert-time">14:19:44</div>
+          </div>
+          <div class="alert-desc">Phase B carrying 41% of total load. Imbalance factor 8.4% above IEC limit.</div>
+        </div>
+        <div class="alert-item info">
+          <div class="alert-top">
+            <div class="alert-title" style="color:var(--accent-cyan)">&#9432; Power Factor Low</div>
+            <div class="alert-time">13:55:02</div>
+          </div>
+          <div class="alert-desc">System PF 0.91 lagging. Capacitor bank compensation recommended.</div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /phase-gauge-row -->
+
+  <!-- TREND CHARTS -->
+  <div class="section-title">Trend Analysis</div>
+  <div class="charts-grid">
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">VOLTAGE &amp; CURRENT TRENDS</div>
+        <div class="time-tabs">
+          <div class="time-tab active" onclick="switchTime('vc','daily',this)">DAY</div>
+          <div class="time-tab" onclick="switchTime('vc','weekly',this)">WEEK</div>
+          <div class="time-tab" onclick="switchTime('vc','monthly',this)">MONTH</div>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="vcChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">LOAD DISTRIBUTION</div>
+        <div class="time-tabs">
+          <div class="time-tab active">NOW</div>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="pieChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="charts-grid2">
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">POWER CONSUMPTION</div>
+        <div class="time-tabs">
+          <div class="time-tab active" onclick="switchTime('power','daily',this)">DAY</div>
+          <div class="time-tab" onclick="switchTime('power','weekly',this)">WEEK</div>
+          <div class="time-tab" onclick="switchTime('power','monthly',this)">MONTH</div>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="powerChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">TEMPERATURE HISTORY</div>
+        <div class="time-tabs">
+          <div class="time-tab active" onclick="switchTime('temp','daily',this)">DAY</div>
+          <div class="time-tab" onclick="switchTime('temp','weekly',this)">WEEK</div>
+          <div class="time-tab" onclick="switchTime('temp','monthly',this)">MONTH</div>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="tempChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">HARMONIC DISTORTION (THD)</div>
+      </div>
+      <div class="chart-wrap"><canvas id="thdChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- LOAD TABLE -->
+  <div class="section-title">Industrial Load Registry</div>
+  <div class="load-table-card">
+    <table>
+      <thead>
+        <tr>
+          <th>Load ID</th>
+          <th>Equipment</th>
+          <th>Phase</th>
+          <th>Voltage (V)</th>
+          <th>Current (A)</th>
+          <th>Power (kW)</th>
+          <th>Temp (&deg;C)</th>
+          <th>PF</th>
+          <th>Utilization</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="loadTableBody"></tbody>
+    </table>
+  </div>
+
+</div><!-- /tab-overview -->
+
+
+<!-- ═══════════════════════════════ TAB: LOAD ANALYSIS -->
+<div class="tab-panel" id="tab-analysis">
+  <div class="section-title">Load Analysis &mdash; Phase Distribution</div>
+  <div class="charts-grid2">
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">PHASE CURRENT COMPARISON</div>
+        <div class="time-tabs">
+          <div class="time-tab active" onclick="switchTime('phaseBar','daily',this)">DAY</div>
+          <div class="time-tab" onclick="switchTime('phaseBar','weekly',this)">WEEK</div>
+          <div class="time-tab" onclick="switchTime('phaseBar','monthly',this)">MONTH</div>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="phaseBarChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">REACTIVE POWER (kVAR)</div>
+        <div class="time-tabs">
+          <div class="time-tab active" onclick="switchTime('kvar','daily',this)">DAY</div>
+          <div class="time-tab" onclick="switchTime('kvar','weekly',this)">WEEK</div>
+          <div class="time-tab" onclick="switchTime('kvar','monthly',this)">MONTH</div>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="kvarChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">APPARENT POWER (kVA)</div>
+        <div class="time-tabs">
+          <div class="time-tab active" onclick="switchTime('kva','daily',this)">DAY</div>
+          <div class="time-tab" onclick="switchTime('kva','weekly',this)">WEEK</div>
+          <div class="time-tab" onclick="switchTime('kva','monthly',this)">MONTH</div>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="kvaChart"></canvas></div>
+    </div>
+  </div>
+  <div class="charts-grid">
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">LOAD DEMAND HISTOGRAM</div>
+        <div class="time-tabs">
+          <div class="time-tab active" onclick="switchTime('demand','daily',this)">DAY</div>
+          <div class="time-tab" onclick="switchTime('demand','weekly',this)">WEEK</div>
+          <div class="time-tab" onclick="switchTime('demand','monthly',this)">MONTH</div>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="demandChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-header"><div class="chart-title">ENERGY BREAKDOWN</div></div>
+      <div class="chart-wrap"><canvas id="energyPieChart"></canvas></div>
+    </div>
+  </div>
+</div><!-- /tab-analysis -->
+
+
+<!-- ═══════════════════════════════ TAB: POWER QUALITY -->
+<div class="tab-panel" id="tab-power">
+  <div class="section-title">Power Quality Analysis</div>
+  <div class="charts-grid2">
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">POWER FACTOR TREND</div>
+        <div class="time-tabs">
+          <div class="time-tab active" onclick="switchTime('pfTrend','daily',this)">DAY</div>
+          <div class="time-tab" onclick="switchTime('pfTrend','weekly',this)">WEEK</div>
+          <div class="time-tab" onclick="switchTime('pfTrend','monthly',this)">MONTH</div>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="pfTrendChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-header"><div class="chart-title">HARMONIC SPECTRUM</div></div>
+      <div class="chart-wrap"><canvas id="harmonicChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">VOLTAGE UNBALANCE</div>
+        <div class="time-tabs">
+          <div class="time-tab active" onclick="switchTime('unbal','daily',this)">DAY</div>
+          <div class="time-tab" onclick="switchTime('unbal','weekly',this)">WEEK</div>
+          <div class="time-tab" onclick="switchTime('unbal','monthly',this)">MONTH</div>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="unbalChart"></canvas></div>
+    </div>
+  </div>
+  <div class="charts-grid">
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">FREQUENCY DEVIATION</div>
+        <div class="time-tabs">
+          <div class="time-tab active" onclick="switchTime('freq','daily',this)">DAY</div>
+          <div class="time-tab" onclick="switchTime('freq','weekly',this)">WEEK</div>
+          <div class="time-tab" onclick="switchTime('freq','monthly',this)">MONTH</div>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="freqChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-header"><div class="chart-title">VOLTAGE SAG/SWELL EVENTS</div></div>
+      <div class="chart-wrap"><canvas id="sagSwellChart"></canvas></div>
+    </div>
+  </div>
+</div><!-- /tab-power -->
+
+
+<!-- ═══════════════════════════════ TAB: THERMAL -->
+<div class="tab-panel" id="tab-thermal">
+  <div class="section-title">Thermal Monitoring</div>
+  <div class="charts-grid2">
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">TEMPERATURE PER PHASE</div>
+        <div class="time-tabs">
+          <div class="time-tab active" onclick="switchTime('thermalPhase','daily',this)">DAY</div>
+          <div class="time-tab" onclick="switchTime('thermalPhase','weekly',this)">WEEK</div>
+          <div class="time-tab" onclick="switchTime('thermalPhase','monthly',this)">MONTH</div>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="thermalPhaseChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">AMBIENT vs LOAD TEMP</div>
+        <div class="time-tabs">
+          <div class="time-tab active" onclick="switchTime('ambientTemp','daily',this)">DAY</div>
+          <div class="time-tab" onclick="switchTime('ambientTemp','weekly',this)">WEEK</div>
+          <div class="time-tab" onclick="switchTime('ambientTemp','monthly',this)">MONTH</div>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="ambientTempChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-header"><div class="chart-title">THERMAL RISK DISTRIBUTION</div></div>
+      <div class="chart-wrap"><canvas id="thermalRiskChart"></canvas></div>
+    </div>
+  </div>
+  <div class="charts-grid">
+    <div class="chart-card">
+      <div class="chart-header"><div class="chart-title">EQUIPMENT TEMPERATURE MAP</div></div>
+      <div class="chart-wrap"><canvas id="equipTempChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">COOLING EFFICIENCY</div>
+        <div class="time-tabs">
+          <div class="time-tab active" onclick="switchTime('cooling','daily',this)">DAY</div>
+          <div class="time-tab" onclick="switchTime('cooling','weekly',this)">WEEK</div>
+          <div class="time-tab" onclick="switchTime('cooling','monthly',this)">MONTH</div>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="coolingChart"></canvas></div>
+    </div>
+  </div>
+</div><!-- /tab-thermal -->
+
+
+<!-- ═══════════════════════════════ TAB: HISTORY -->
+<div class="tab-panel" id="tab-history">
+  <div class="section-title">Historical Reports</div>
+  <div class="charts-grid">
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">ENERGY CONSUMPTION HISTORY</div>
+        <div class="time-tabs">
+          <div class="time-tab" onclick="switchTime('energyHist','daily',this)">DAY</div>
+          <div class="time-tab active" onclick="switchTime('energyHist','weekly',this)">WEEK</div>
+          <div class="time-tab" onclick="switchTime('energyHist','monthly',this)">MONTH</div>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="energyHistChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">FAULT HISTORY</div>
+        <div class="time-tabs">
+          <div class="time-tab" onclick="switchTime('faultHist','daily',this)">DAY</div>
+          <div class="time-tab" onclick="switchTime('faultHist','weekly',this)">WEEK</div>
+          <div class="time-tab active" onclick="switchTime('faultHist','monthly',this)">MONTH</div>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="faultHistChart"></canvas></div>
+    </div>
+  </div>
+  <div class="charts-grid2">
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">PEAK DEMAND HISTORY</div>
+        <div class="time-tabs">
+          <div class="time-tab" onclick="switchTime('peakDemand','daily',this)">DAY</div>
+          <div class="time-tab active" onclick="switchTime('peakDemand','weekly',this)">WEEK</div>
+          <div class="time-tab" onclick="switchTime('peakDemand','monthly',this)">MONTH</div>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="peakDemandChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">EFFICIENCY SCORE</div>
+        <div class="time-tabs">
+          <div class="time-tab" onclick="switchTime('effScore','daily',this)">DAY</div>
+          <div class="time-tab active" onclick="switchTime('effScore','weekly',this)">WEEK</div>
+          <div class="time-tab" onclick="switchTime('effScore','monthly',this)">MONTH</div>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="effScoreChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">COST ANALYSIS</div>
+        <div class="time-tabs">
+          <div class="time-tab" onclick="switchTime('cost','daily',this)">DAY</div>
+          <div class="time-tab" onclick="switchTime('cost','weekly',this)">WEEK</div>
+          <div class="time-tab active" onclick="switchTime('cost','monthly',this)">MONTH</div>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="costChart"></canvas></div>
+    </div>
+  </div>
+</div><!-- /tab-history -->
+
+
+<!-- ═══════════════════════════════ TAB: ALERTS & SOLUTIONS -->
+<div class="tab-panel" id="tab-alerts">
+  <div class="section-title">Alerts &amp; Automated Solutions</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+
+    <!-- Left column: charts -->
+    <div>
+      <div class="chart-card" style="margin-bottom:16px">
+        <div class="chart-header">
+          <div class="chart-title">ALERT FREQUENCY</div>
+          <div class="time-tabs">
+            <div class="time-tab active" onclick="switchTime('alertFreq','daily',this)">DAY</div>
+            <div class="time-tab" onclick="switchTime('alertFreq','weekly',this)">WEEK</div>
+            <div class="time-tab" onclick="switchTime('alertFreq','monthly',this)">MONTH</div>
+          </div>
+        </div>
+        <div class="chart-wrap"><canvas id="alertFreqChart"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header"><div class="chart-title">ALERT CATEGORIES</div></div>
+        <div class="chart-wrap"><canvas id="alertCatChart"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Right column: alerts list -->
+    <div>
+      <div class="alerts-card" style="max-height:none;height:100%">
+        <div class="alerts-header">
+          <div class="alerts-title">ALL ACTIVE ALERTS &mdash; CLICK FOR SOLUTION</div>
+          <div class="alert-count" id="alertCountBadge2">2</div>
+        </div>
+        <div class="alerts-list" style="max-height:500px">
+          <div class="alert-item critical" onclick="openSolution('overtemp')">
+            <div class="alert-top">
+              <div class="alert-title" style="color:var(--accent-red)">&#9888; Phase B Bus Overtemperature</div>
+              <div class="alert-time">14:23:11</div>
+            </div>
+            <div class="alert-desc">Bus bar temperature 78.4&deg;C &mdash; exceeds 75&deg;C threshold. Immediate action required to prevent insulation degradation.</div>
+          </div>
+          <div class="alert-item warning" onclick="openSolution('unbalance')">
+            <div class="alert-top">
+              <div class="alert-title" style="color:var(--accent-orange)">&#9889; Phase Load Imbalance</div>
+              <div class="alert-time">14:19:44</div>
+            </div>
+            <div class="alert-desc">Phase B carrying 41.4% total load vs Phase C at 24.2%. IEC 60034-26 threshold exceeded.</div>
+          </div>
+          <div class="alert-item warning" onclick="openSolution('pf')">
+            <div class="alert-top">
+              <div class="alert-title" style="color:var(--accent-orange)">&#128202; Low Power Factor</div>
+              <div class="alert-time">13:55:02</div>
+            </div>
+            <div class="alert-desc">PF = 0.91 lagging. Reactive power penalty charges will apply. Capacitor correction needed.</div>
+          </div>
+          <div class="alert-item info" onclick="openSolution('harmonic')">
+            <div class="alert-top">
+              <div class="alert-title" style="color:var(--accent-cyan)">&#8767; THD Elevated on Phase B</div>
+              <div class="alert-time">13:30:18</div>
+            </div>
+            <div class="alert-desc">Phase B total harmonic distortion at 5.8%. IEEE 519 limit is 5.0% for this PCC.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div><!-- /tab-alerts -->
+
+</main>
+
+
+<!-- ═══════════════════════════════ SOLUTION MODAL -->
+<div class="solution-overlay" id="solutionOverlay" onclick="closeSolutionOutside(event)">
+  <div class="solution-modal" id="solutionModal">
+    <div class="solution-header">
+      <div style="display:flex;align-items:flex-start;gap:16px">
+        <div class="solution-icon" id="sol-icon">&#9888;</div>
+        <div>
+          <div class="solution-htitle" id="sol-title">Alert Title</div>
+          <div class="solution-hsubtitle" id="sol-subtitle">Alert description here</div>
+        </div>
+      </div>
+      <button class="solution-close" onclick="closeSolution()">&#10005; CLOSE</button>
+    </div>
+    <div class="solution-body">
+      <div class="solution-section">
+        <div class="solution-section-title">ROOT CAUSE ANALYSIS</div>
+        <div id="sol-cause" style="font-size:13px;color:var(--text-secondary);line-height:1.6;background:var(--bg-card2);border-radius:8px;padding:14px;border:1px solid var(--border-dim)"></div>
+      </div>
+      <div class="solution-section">
+        <div class="solution-section-title">REMEDIATION STEPS</div>
+        <div class="solution-steps" id="sol-steps"></div>
+      </div>
+      <div class="solution-section">
+        <div class="solution-section-title">EXPECTED OUTCOME AFTER IMPLEMENTATION</div>
+        <div class="solution-metrics" id="sol-metrics"></div>
+      </div>
+      <button class="implement-btn" id="implementBtn" onclick="implementSolution()">&#9889; IMPLEMENT SOLUTION NOW</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════ TOAST -->
+<div class="toast" id="toast">
+  <div class="toast-icon" id="toastIcon">&#9989;</div>
+  <div id="toastMsg">Solution implemented successfully.</div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
